@@ -83,6 +83,8 @@ def run_trial(config):
         else:
             cluster_xs[cluster].append(node)
 
+    tracts = list(state_df.index)
+    valid_centers = [ix for ix, t in enumerate(tracts) if t in tract_dist_dict]
     centers = []
     for i, cluster in cluster_ys.items():
         cluster_weights = np.array([y_activation[y] for y in cluster])
@@ -90,9 +92,10 @@ def run_trial(config):
         cluster_positions = state_df.loc[cluster][['x', 'y']].values
         cluster_center = cluster_weights.dot(cluster_positions).flatten()
         pdist = vecdist(cluster_center[1], cluster_center[0],
-                        state_df['y'], state_df['x'])
+                        state_df['y'].values[valid_centers],
+                        state_df['x'].values[valid_centers])
         center = np.argmin(pdist)
-        centers.append(center)
+        centers.append(tracts[valid_centers[center]])
 
     results['spectral']['time'] = time.time() - spectral_label_start_t
     results['spectral']['centers'] = centers
@@ -163,8 +166,6 @@ def run_experiment(experiment_config):
         trial_config = experiment_config['base_config'].copy()
         for k, v in params:
             trial_config[k] = v
-        if trial_config['n_districts'] > 4:
-            continue
         print(trial_config)
         run_trial(trial_config)
 

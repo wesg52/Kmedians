@@ -17,6 +17,25 @@ def vecdist(s_lat, s_lng, e_lat, e_lng):
     return 2 * R * np.arcsin(np.sqrt(d))
 
 
+def geo_to_euclidean_coords(lat, lon):
+    lon = np.deg2rad(lon)
+    lat = np.deg2rad(lat)
+    R = 6373
+    x = R * np.cos(lat) * np.cos(lon)
+    y = R * np.cos(lat) * np.sin(lon)
+    z = R * np.sin(lat)
+    return x, y, z
+
+
+def euclidean_coords_to_geo(x, y, z):
+    R = 6373
+    lat = np.arcsin(z / R)
+    lon = np.arctan2(y, x)
+    lat = np.rad2deg(lat)
+    lon = np.rad2deg(lon)
+    return np.array([lon, lat]).T
+
+
 def gap_callback(model, where):
     if where == GRB.Callback.BARRIER:
         primobj = model.cbGet(GRB.Callback.BARRIER_PRIMOBJ)
@@ -70,20 +89,18 @@ def make_relaxed_model(config, pop_dict, lengths):
 
     return kmed, xs, ys
 
-def get_seeds(config, state_df, init='random'):
+def get_seeds(config, pts, state_df, valid_centers, init='random'):
     n_distrs = config['n_districts']
-    tracts = list(state_df.index)
-    # TODO: make latitude longitude adjustment
-    pts = state_df[['x', 'y']].values
     weights = state_df['population'].values + 1
-    kmeans = KMeans(n_clusters=n_distrs, init=init)\
+    kmeans = KMeans(n_clusters=n_distrs, init=init, n_jobs=-1)\
         .fit(pts, sample_weight=weights).cluster_centers_
-
+    kmeans = euclidean_coords_to_geo(kmeans[:, 0], kmeans[:, 1], kmeans[:, 2])
     centers = []
+    epts = euclidean_coords_to_geo(pts[:, 0], pts[:, 1], pts[:, 2])
     for mean in kmeans:
-        pdist = vecdist(mean[1], mean[0], pts[:, 1], pts[:, 0])
+        pdist = vecdist(mean[1], mean[0], epts[valid_centers, 1], epts[valid_centers, 0])
         center = np.argmin(pdist)
-        centers.append(tracts[center])
+        centers.append(valid_centers[center])
     return centers
 
 def solve_kmeans_heuristic(config, lengths, state_df):
@@ -91,9 +108,14 @@ def solve_kmeans_heuristic(config, lengths, state_df):
     best_sol = None
     num_infeasible = 0
     pop_dict = state_df['population'].to_dict()
+    lat = state_df['y'].values
+    lon = state_df['x'].values
+    x, y, z = geo_to_euclidean_coords(lat, lon)
+    tracts = list(state_df.index)
+    valid_centers = [ix for ix, t in enumerate(tracts) if t in lengths]
     for i in range(config['kmeans_iterations']):
-        centers = get_seeds(config, state_df)
-        center_lengths = {c: lengths[c] for c in centers}
+        centers = get_seeds(config, np.array([x, y, z]).T, state_df, valid_centers)
+        center_lengths = {c: lengths[tracts[c]] for c in centers}
         transport, xs = make_transportation_problem(config, center_lengths, pop_dict)
         transport.Params.MIPGap = config['MIPGap_tol']
         transport.Params.TimeLimit = 5
