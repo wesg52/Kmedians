@@ -5,7 +5,7 @@ import time
 import networkx as nx
 
 
-def run_trial(config):
+def run_trial(config, save=True):
     # Basic Trial Setup
     results = {}
     results['preprocess'] = {}
@@ -53,7 +53,11 @@ def run_trial(config):
     barrier_start_t = time.time()
     model.optimize(gap_callback)
     results['barrier']['time'] = time.time() - barrier_start_t
-    results['barrier']['obj'] = model.objVal
+    try:
+        results['barrier']['obj'] = model.objVal
+    except:
+        results['barrier']['obj'] = 'INFEASIBLE'
+        return
     results['barrier']['ub'] = model._primalobj
     results['barrier']['lb'] = model._dualobj
     y_activation = {i: ys[i].X if ys[i].X > activation_threshold
@@ -135,7 +139,9 @@ def run_trial(config):
     results['kmeans']['num_infeasible'] = num_infeasible
 
     id = '_'.join([str(v) for k, v in config.items()]).replace('.', '')
-    json.dump(results, open(os.path.join('results', id + '.json'), 'w'))
+    if save:
+        json.dump(results, open(os.path.join('results', id + '.json'), 'w'))
+    return results
 
 
 def run_experiment(experiment_config):
@@ -171,10 +177,12 @@ def run_experiment(experiment_config):
 
 
 
+
+
 if __name__ == '__main__':
     param_setting = {
-        'xij_prune_radius': [2, 4],
-        'yi_prune_ratio': [0, .5],
+        'xij_prune_radius': [2, 4, 6, 8],
+        'yi_prune_ratio': [0, .5, .75],
         'cost_exponential': [1, 1.5, 2],
         'population_tolerance': [.01, .025, .05]
     }
