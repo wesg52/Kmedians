@@ -92,7 +92,7 @@ def run_trial(config, save=True):
     centers = []
     for i, cluster in cluster_ys.items():
         cluster_weights = np.array([y_activation[y] for y in cluster])
-        cluster_weights /= sum(cluster_weights.flatten())
+        cluster_weights = cluster_weights / sum(cluster_weights.flatten())
         cluster_positions = state_df.loc[cluster][['x', 'y']].values
         cluster_center = cluster_weights.dot(cluster_positions).flatten()
         pdist = vecdist(cluster_center[1], cluster_center[0],
